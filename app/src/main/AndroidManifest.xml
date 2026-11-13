@@ -15,6 +15,16 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
 
+    <!-- 운행 중 내비 위에 다이나믹 아일랜드(오버레이)를 띄우기 위한 권한 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- 운행 시작 때 내비게이션 앱을 띄우려면 패키지를 조회할 수 있어야 한다(Android 11+). -->
+    <queries>
+        <package android:name="ai.umos.maps.android.navigation.app" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -29,6 +39,15 @@
             android:name=".MainActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
+
+        <service
+            android:name=".IslandOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="driving_status_overlay" />
+        </service>
 
         <activity
             android:name=".SplashActivity"

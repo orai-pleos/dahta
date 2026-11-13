@@ -10,10 +10,10 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.orai.dahta.constant.SplashConstants;
 import com.orai.dahta.res.R;
 
 public final class SplashActivity extends AppCompatActivity {
-    private static final long DISPLAY_MILLIS = 2500;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable openMain = () -> {
         startActivity(new Intent(this, MainActivity.class));
@@ -35,7 +35,7 @@ public final class SplashActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        handler.postDelayed(openMain, DISPLAY_MILLIS);
+        handler.postDelayed(openMain, SplashConstants.DISPLAY_MILLIS);
     }
 
     @Override
