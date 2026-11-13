@@ -1,10 +1,14 @@
 [versions]
 agp = "9.5.1"
+fusedlocation = "1.1.3"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 appcompat = "1.8.0"
 material = "1.14.0"
+navihelper = "3.0.5"
+speechtotext = "3.3.1"
+vehicle = "2.3.2"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -12,6 +16,12 @@ ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitV
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+
+navihelper = { module = "ai.pleos.playground:NaviHelper", version.ref = "navihelper" }
+stt = { module = "ai.pleos.playground:SpeechToText", version.ref = "speechtotext" }
+tts = { module = "ai.pleos.playground:TextToSpeech", version.ref = "speechtotext" }
+vehicle = { module = "ai.pleos.playground:Vehicle", version.ref = "vehicle" }
+fusedlocation = { module = "ai.pleos.playground:FusedLocation", version.ref = "fusedlocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

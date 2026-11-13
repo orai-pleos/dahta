@@ -61,11 +61,11 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
 
-    implementation("ai.pleos.playground:Vehicle:2.3.2")
-    implementation("ai.pleos.playground:NaviHelper:3.0.5")
-    implementation("ai.pleos.playground:SpeechToText:3.3.1")
-    implementation("ai.pleos.playground:TextToSpeech:3.3.1")
-    implementation("ai.pleos.playground:FusedLocation:1.1.3")
+    implementation(libs.vehicle)
+    implementation(libs.navihelper)
+    implementation(libs.stt)
+    implementation(libs.tts)
+    implementation(libs.fusedlocation)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
