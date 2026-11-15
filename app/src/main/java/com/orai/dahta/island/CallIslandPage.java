@@ -4,6 +4,7 @@ import android.content.Context;
 import android.view.ViewGroup;
 
 import com.orai.dahta.res.R;
+import com.orai.dahta.ui.Motion;
 
 /** 호출 도착 카드. [모시러 가기] / [나중에] 버튼을 가진다. */
 public final class CallIslandPage extends IslandPage {
@@ -12,6 +13,7 @@ public final class CallIslandPage extends IslandPage {
         super(context, parent, R.layout.island_page_call);
         find(R.id.island_call_accept).setOnClickListener(button -> onAccept.run());
         find(R.id.island_call_later).setOnClickListener(button -> onLater.run());
+        Motion.pressScale(find(R.id.island_call_accept), find(R.id.island_call_later));
     }
 
     @Override

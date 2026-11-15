@@ -30,6 +30,7 @@ import com.orai.dahta.island.GuideIslandPage;
 import com.orai.dahta.island.IslandPage;
 import com.orai.dahta.island.IslandPhase;
 import com.orai.dahta.res.R;
+import com.orai.dahta.ui.Motion;
 
 /**
  * 운행 중 내비 위에 떠 있는 다이나믹 아일랜드(오버레이).
@@ -63,6 +64,10 @@ public final class IslandOverlayService extends Service {
   private GuideIslandPage guidePage;
   private CallIslandPage callPage;
   private IslandPage currentPage;
+  /**
+   * 이번 터치가 섬 본체에서 시작했는지. 그림자용 투명 여백을 누른 것은 섬을 누른 것으로 보지 않는다.
+   */
+  private boolean touchStartedOnPage;
   private int areaLeft;
   private int areaTop;
   private int areaWidth;
@@ -119,7 +124,7 @@ public final class IslandOverlayService extends Service {
         getString(R.string.island_notification_channel),
         NotificationManager.IMPORTANCE_LOW));
     Notification notification = new NotificationCompat.Builder(this, IslandConstants.NOTIFICATION_CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_flow_car)
+        .setSmallIcon(R.drawable.figma_car)
         .setContentTitle(getString(R.string.island_notification_title))
         .setContentText(getString(R.string.island_notification_text))
         .setOngoing(true)
@@ -152,7 +157,12 @@ public final class IslandOverlayService extends Service {
             return true;
           }
         });
-    container.setOnTouchListener((view, event) -> gestureDetector.onTouchEvent(event));
+    container.setOnTouchListener((view, event) -> {
+      if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        touchStartedOnPage = isOnPage(event);
+      }
+      return touchStartedOnPage && gestureDetector.onTouchEvent(event);
+    });
 
     compactPage = new CompactIslandPage(themed, container);
     guidePage = new GuideIslandPage(themed, container);
@@ -168,7 +178,10 @@ public final class IslandOverlayService extends Service {
             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT);
     params.gravity = Gravity.TOP | Gravity.START;
-    params.y = areaTop + Math.round(IslandConstants.TOP_MARGIN_DP * getResources().getDisplayMetrics().density);
+    // 섬 둘레에 그림자용 여백이 있으므로, 위쪽 여백만큼 올려서 섬 본체가 같은 자리에 오게 한다.
+    params.y = areaTop
+        + Math.round(IslandConstants.TOP_MARGIN_DP * getResources().getDisplayMetrics().density)
+        - getResources().getDimensionPixelSize(R.dimen.island_shadow_padding_top);
     showCurrentPage();
     params.x = centeredX();
     windowManager.addView(container, params);
@@ -177,14 +190,35 @@ public final class IslandOverlayService extends Service {
   // ---- 상태 전환 ---------------------------------------------------------------------------
 
   /**
-   * 섬을 눌렀을 때. 대기 중이면 호출 카드를 띄우고, 그 외에는 확장/축소를 번갈아 한다.
+   * 섬을 눌렀을 때.
+   * <ul>
+   *   <li>호출 대기 중: 호출 카드를 띄운다.</li>
+   *   <li>호출 중(카드) / 모시러 가는 중: 닿다 설정 화면으로 간다. 섬은 그대로 남는다.</li>
+   *   <li>그 외: 확장/축소를 번갈아 한다.</li>
+   * </ul>
    */
   private void onIslandClicked() {
-    if (phase == IslandPhase.WAITING) {
-      showPhase(IslandPhase.CALL, true);
-    } else {
-      showPhase(phase, !expanded);
+    switch (phase) {
+      case WAITING:
+        showPhase(IslandPhase.CALL, true);
+        break;
+      case CALL:
+      case DRIVING:
+        openSettings();
+        break;
+      default:
+        showPhase(phase, !expanded);
+        break;
     }
+  }
+
+  /**
+   * 닿다 설정 화면을 앞으로 가져온다. 섬의 단계는 바꾸지 않으므로, 사용자가 내비를 눌러
+   * 닿다가 다시 백그라운드로 가도 섬은 이전 모습 그대로 있다.
+   */
+  private void openSettings() {
+    startActivity(new Intent(this, MainActivity.class)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
   }
 
   /**
@@ -252,6 +286,18 @@ public final class IslandOverlayService extends Service {
   }
 
   /**
+   * 터치 위치가 지금 보이는 섬 본체 안인지.
+   */
+  private boolean isOnPage(MotionEvent event) {
+    if (currentPage == null) {
+      return false;
+    }
+    View page = currentPage.view();
+    return event.getX() >= page.getLeft() && event.getX() <= page.getRight()
+        && event.getY() >= page.getTop() && event.getY() <= page.getBottom();
+  }
+
+  /**
    * 지금 단계와 확장 여부에 맞는 페이지.
    */
   private IslandPage pageFor() {
@@ -274,6 +320,8 @@ public final class IslandOverlayService extends Service {
       container.removeAllViews();
       container.addView(page.view());
       currentPage = page;
+      // 페이지가 바뀔 때 딱 바뀌지 않고 마치 튀어나오듯 나타난다.
+      Motion.popIn(page.view());
     }
   }
 
