@@ -1,5 +1,9 @@
 # 닿다 (DAHTA)
 
+<p align="center">
+  <img src="docs/image/dahta_logo_intro_v2.gif" alt="닿다 DAHTA 로고 인트로" width="480" />
+</p>
+
 택시 기사님을 위한 Pleos Connect 차량 앱
 
 **닿다 [다타]** —  **손님이 타는 순간부터 내릴 때까지, 차가 대신 말해 주는 택시 기사님용 앱 택시 기사용 앱**
@@ -159,7 +163,27 @@
 
 ## 팀 소개
 
-**오라이**
+**TEAM 오라이**
 
-| [박성현](https://github.com/mamc325) | [송희](https://github.com/felizsong) | [한지운](https://github.com/Wooniq) |
-| --- | --- | --- |
+<table width="30%" align="center">
+    <tr>
+        <td align="center"><b>팀장</b></td>
+        <td align="center"><b>팀원</b></td>
+        <td align="center"><b>팀원</b></td>
+    </tr>
+    <tr>
+        <td align="center"><img src="https://avatars.githubusercontent.com/u/127631991?v=4" width="300px" /></td>
+        <td align="center"><img src="https://avatars.githubusercontent.com/u/157571665?v=4" width="300px" /></td>
+        <td align="center"><img src="https://avatars.githubusercontent.com/u/100463930?s=400&u=a798be299466fc30cf00bfb1e3bf320ace817986&v=4" width="300px" /></td>
+    </tr>
+    <tr>
+        <td align="center"><b><a href="https://github.com/felizsong">송희</a></b></td>
+        <td align="center"><b><a href="https://github.com/mamc325">박성현</a></b></td>
+        <td align="center"><b><a href="https://github.com/Wooniq">한지운</a></b></td>
+    </tr>
+    <tr>
+        <td align="center"><b>기획 · 개발</b></td>
+        <td align="center"><b>기획 · 개발</b></td>
+        <td align="center"><b>기획 · 개발</b></td>
+    </tr>
+</table>
