@@ -4,7 +4,8 @@ package com.orai.dahta.island;
 public enum IslandPhase {
     WAITING, /** 호출을 기다리는 중. */
     CALL,    /** 새 호출이 들어옴. */
-    DRIVING, /** 호출을 수락하고 손님을 모시러 가는 중. */
-    GUIDING, /** 손님 탑승 후 안내 순간. */
+    PICKUP,  /** 호출을 잡고 손님을 태우러 가는 중(손님은 아직 안 탐). */
+    DRIVING, /** 손님이 탄 뒤, 모시는 중. */
+    GUIDING, /** 안내 순간. */
     ARRIVED  /** 목적지 도착. */
 }

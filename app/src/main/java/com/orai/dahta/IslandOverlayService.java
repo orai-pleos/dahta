@@ -6,10 +6,11 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.view.ContextThemeWrapper;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -23,14 +24,17 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
 import com.orai.dahta.constant.IslandConstants;
-import com.orai.dahta.constant.SessionPrefs;
 import com.orai.dahta.island.CallIslandPage;
 import com.orai.dahta.island.CompactIslandPage;
 import com.orai.dahta.island.GuideIslandPage;
 import com.orai.dahta.island.IslandPage;
 import com.orai.dahta.island.IslandPhase;
+import com.orai.dahta.island.PickupIslandPage;
+import com.orai.dahta.navigation.NaviHelperPickupTracker;
+import com.orai.dahta.navigation.PickupTracker;
 import com.orai.dahta.res.R;
 import com.orai.dahta.ui.Motion;
+import com.orai.dahta.vehicle.RearDoorWatcher;
 
 /**
  * 운행 중 내비 위에 떠 있는 다이나믹 아일랜드(오버레이).
@@ -63,6 +67,7 @@ public final class IslandOverlayService extends Service {
   private CompactIslandPage compactPage;
   private GuideIslandPage guidePage;
   private CallIslandPage callPage;
+  private PickupIslandPage pickupPage;
   private IslandPage currentPage;
   /**
    * 이번 터치가 섬 본체에서 시작했는지. 그림자용 투명 여백을 누른 것은 섬을 누른 것으로 보지 않는다.
@@ -73,6 +78,10 @@ public final class IslandOverlayService extends Service {
   private int areaWidth;
   private IslandPhase phase = IslandPhase.WAITING;
   private boolean expanded = false;
+  private RearDoorWatcher rearDoorWatcher;
+  private PickupTracker pickupTracker;
+  private boolean trackingPickup;
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   /**
    * 섬이 떠 있으면 true.
@@ -87,6 +96,8 @@ public final class IslandOverlayService extends Service {
     if (container == null) {
       readArea(intent);
       addIsland();
+      startRearDoorWatcher();
+      pickupTracker = new NaviHelperPickupTracker(this);
       active = true;
     }
     return START_NOT_STICKY;
@@ -95,6 +106,11 @@ public final class IslandOverlayService extends Service {
   @Override
   public void onDestroy() {
     active = false;
+    stopPickupTracking();
+    if (rearDoorWatcher != null) {
+      rearDoorWatcher.stop();
+      rearDoorWatcher = null;
+    }
     if (container != null) {
       windowManager.removeView(container);
       container = null;
@@ -137,7 +153,7 @@ public final class IslandOverlayService extends Service {
     windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
     Context themed = new ContextThemeWrapper(this, R.style.Theme_Dahta);
     container = (ViewGroup) LayoutInflater.from(themed).inflate(R.layout.view_island, null);
-    // 한 번 누르면 확장/축소, '모시는 중'에서 두 번 누르면 운행 종료(임시).
+    // 한 번 누르면 단계에 맞는 동작(확장/축소, 설정 열기 등). 운행 종료는 닿다 화면의 [운행 종료하기]로 한다.
     GestureDetector gestureDetector = new GestureDetector(themed,
         new GestureDetector.SimpleOnGestureListener() {
           @Override
@@ -146,14 +162,8 @@ public final class IslandOverlayService extends Service {
           }
 
           @Override
-          public boolean onSingleTapConfirmed(MotionEvent event) {
+          public boolean onSingleTapUp(MotionEvent event) {
             onIslandClicked();
-            return true;
-          }
-
-          @Override
-          public boolean onDoubleTap(MotionEvent event) {
-            onIslandDoubleClicked();
             return true;
           }
         });
@@ -167,6 +177,7 @@ public final class IslandOverlayService extends Service {
     compactPage = new CompactIslandPage(themed, container);
     guidePage = new GuideIslandPage(themed, container);
     callPage = new CallIslandPage(themed, container, this::acceptCall, this::postponeCall);
+    pickupPage = new PickupIslandPage(themed, container);
 
     params = new WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -193,8 +204,9 @@ public final class IslandOverlayService extends Service {
    * 섬을 눌렀을 때.
    * <ul>
    *   <li>호출 대기 중: 호출 카드를 띄운다.</li>
-   *   <li>호출 중(카드) / 모시러 가는 중: 닿다 설정 화면으로 간다. 섬은 그대로 남는다.</li>
-   *   <li>그 외: 확장/축소를 번갈아 한다.</li>
+   *   <li>호출 중(카드): 닿다 설정 화면으로 간다. 섬은 그대로 남는다.</li>
+   *   <li>그 외(모시는 중 포함): 확장/축소를 번갈아 한다. 모시는 중 알약을 누르면
+   *   "손님을 모시는 중이에요" 카드가 펼쳐진다.</li>
    * </ul>
    */
   private void onIslandClicked() {
@@ -203,13 +215,68 @@ public final class IslandOverlayService extends Service {
         showPhase(IslandPhase.CALL, true);
         break;
       case CALL:
-      case DRIVING:
+      case PICKUP:
         openSettings();
         break;
       default:
         showPhase(phase, !expanded);
         break;
     }
+  }
+
+  /**
+   * 뒷문이 열렸다 닫히면(손님이 탐) 목적지를 듣는 화면(STT)을 앞으로 띄운다.
+   * 섬의 단계는 바꾸지 않으므로, 화면에서 나오면 섬은 그대로 있다.
+   */
+  private void startRearDoorWatcher() {
+    rearDoorWatcher = new RearDoorWatcher(this, this::onRearDoorClosed);
+    rearDoorWatcher.start();
+  }
+
+  /**
+   * 뒷문이 열렸다 닫혔을 때(손님이 탄 순간).
+   * <ul>
+   *   <li>호출을 잡은 상태(마중 중): 목적지를 이미 알고 있으므로 STT 없이 '모시는 중'으로 바꾼다.</li>
+   *   <li>호출이 없는 상태(대기 / 호출 도착 전): 대신 목적지를 듣는 STT 화면을 띄운다.</li>
+   *   <li>그 외(이미 모시는 중 등): 아무것도 하지 않는다.</li>
+   * </ul>
+   */
+  private void onRearDoorClosed() {
+    switch (phase) {
+      case PICKUP:
+        showPhase(IslandPhase.DRIVING, false);
+        break;
+      case WAITING:
+      case CALL:
+        // 목적지 듣기(STT) 화면은 차가 멈췄을 때(기어 P 또는 N)만 띄운다. 주행 중에는 내비 그대로 둔다.
+        if (rearDoorWatcher.isStopped()) {
+          openDestination();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * 내비게이션이 알려 주는 탑승 지점까지의 거리와 방향을 섬에 반영한다. 마중 중일 때만 쓴다.
+   * 실제 내비 이벤트가 연동되면 여기만 호출하면 된다.
+   *
+   * @param meters         탑승 지점까지 남은 거리(m)
+   * @param bearingDegrees 진행 방향 기준 탑승 지점 방향(도). 0 이 앞, 시계 방향이 +.
+   */
+  private void updatePickup(int meters, float bearingDegrees) {
+    pickupPage.update(meters, bearingDegrees);
+    if (phase == IslandPhase.PICKUP) {
+      render();
+    }
+  }
+
+  private void openDestination() {
+    // 닿다 설정 화면과 다른 작업(taskAffinity 가 비어 있다)에 띄운다. 그래서 화면을 닫으면
+    // 닿다 기본 화면이 아니라 직전에 보던 내비로 돌아간다.
+    startActivity(new Intent(this, DestinationActivity.class)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
   }
 
   /**
@@ -222,39 +289,40 @@ public final class IslandOverlayService extends Service {
   }
 
   /**
-   * 섬을 두 번 눌렀을 때. '모시는 중'이면 운행을 종료한다(임시). 그 외 단계에서는 한 번 누른 것과 같다.
-   */
-  private void onIslandDoubleClicked() {
-    if (phase == IslandPhase.DRIVING || phase == IslandPhase.GUIDING) {
-      endDrive();
-    } else {
-      onIslandClicked();
-    }
-  }
-
-  /**
-   * 운행 종료(임시): 운행 시간을 저장하고, 섬을 끄고, 닿다 요약 화면으로 돌아간다.
-   * 실제 종료 시점(도착 이벤트 등)이 정해지면 이 호출 지점만 바꾸면 된다.
-   */
-  private void endDrive() {
-    SharedPreferences preferences = getSharedPreferences(SessionPrefs.NAME, MODE_PRIVATE);
-    long now = System.currentTimeMillis();
-    long duration = Math.max(0, now - preferences.getLong(SessionPrefs.KEY_STARTED_AT, now));
-    preferences.edit().putBoolean(SessionPrefs.KEY_RUNNING, false)
-        .putBoolean(SessionPrefs.KEY_SUMMARY_PENDING, true)
-        .putLong(SessionPrefs.KEY_DURATION_MS, duration)
-        .remove(SessionPrefs.KEY_STARTED_AT).apply();
-    // 새로 시작해서 저장된 상태(요약 화면)를 처음부터 읽게 한다.
-    startActivity(new Intent(this, MainActivity.class)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
-    stopSelf();
-  }
-
-  /**
-   * [모시러 가기]: 호출을 수락하고 손님을 모시러 간다.
+   * [모시러 가기]: 호출을 수락하고 손님을 태우러 간다. 손님이 타면 '모시는 중'으로 바뀐다.
    */
   private void acceptCall() {
-    showPhase(IslandPhase.DRIVING, false);
+    showPhase(IslandPhase.PICKUP, false);
+    startPickupTracking();
+  }
+
+  /**
+   * 탑승 지점으로 길 안내를 요청하고, 내비가 주는 남은 거리와 방향을 섬에 반영한다.
+   * 탑승 지점은 아직 호출 데이터가 없어 화면 확인용 값(IslandConstants)을 쓴다.
+   */
+  private void startPickupTracking() {
+    trackingPickup = true;
+    pickupTracker.start(new PickupTracker.Point(
+            IslandConstants.DEMO_PICKUP_LATITUDE, IslandConstants.DEMO_PICKUP_LONGITUDE,
+            IslandConstants.DEMO_PICKUP_NAME, IslandConstants.DEMO_PICKUP_ADDRESS),
+        new PickupTracker.Listener() {
+          @Override
+          public void onUpdated(int meters, float bearingDegrees) {
+            mainHandler.post(() -> updatePickup(meters, bearingDegrees));
+          }
+
+          @Override
+          public void onArrived() {
+            mainHandler.post(() -> updatePickup(0, 0f));
+          }
+        });
+  }
+
+  private void stopPickupTracking() {
+    if (trackingPickup) {
+      trackingPickup = false;
+      pickupTracker.stop();
+    }
   }
 
   /**
@@ -268,6 +336,9 @@ public final class IslandOverlayService extends Service {
    * 섬의 단계와 확장 여부를 바꾼다. 실제 이벤트가 연동되면 여기만 호출하면 된다.
    */
   private void showPhase(IslandPhase newPhase, boolean newExpanded) {
+    if (newPhase != IslandPhase.PICKUP) {
+      stopPickupTracking();
+    }
     phase = newPhase;
     expanded = newExpanded;
     render();
@@ -301,6 +372,9 @@ public final class IslandOverlayService extends Service {
    * 지금 단계와 확장 여부에 맞는 페이지.
    */
   private IslandPage pageFor() {
+    if (phase == IslandPhase.PICKUP) {
+      return pickupPage;
+    }
     if (expanded && phase == IslandPhase.CALL) {
       return callPage;
     }

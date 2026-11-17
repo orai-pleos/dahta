@@ -142,6 +142,20 @@ public class MainActivity extends AppCompatActivity {
   }
 
   /**
+   * [운행 종료하기]: 운행 시간을 저장하고, 내비 위의 섬을 끄고, 오늘 운행 요약이 있는 메인 화면으로 돌아간다.
+   */
+  private void endSession() {
+    long now = System.currentTimeMillis();
+    long duration = Math.max(0, now - preferences.getLong(SessionPrefs.KEY_STARTED_AT, now));
+    preferences.edit().putBoolean(SessionPrefs.KEY_RUNNING, false)
+        .putBoolean(SessionPrefs.KEY_SUMMARY_PENDING, true)
+        .putLong(SessionPrefs.KEY_DURATION_MS, duration)
+        .remove(SessionPrefs.KEY_STARTED_AT).apply();
+    stopService(new Intent(this, IslandOverlayService.class));
+    showMain();
+  }
+
+  /**
    * 운행 시작: 권한이 있으면 바로, 없으면 설정 화면을 거쳐 섬을 띄우고 내비를 앞으로 띄운다.
    */
   private void startIsland() {
@@ -209,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
         settingsStore::setTtsLanguage);
     bindSpeechSpeed();
     View endDrive = findViewById(R.id.btn_end_drive);
+    endDrive.setOnClickListener(view -> endSession());
     Motion.allowShadowOverflow(endDrive);
     // 손님을 기다리는 카드와 진행 단계 카드의 그림자가 잘리지 않게 한다.
     Motion.allowShadowOverflow(findViewById(R.id.waiting_status_card));
